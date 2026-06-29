@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
+use App\Models\Consultation;
 use App\Models\Service;
+use App\Services\MidtransService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 
 class BookingController extends Controller
@@ -16,13 +17,8 @@ class BookingController extends Controller
     private function bookingUrls(Booking $booking): array
     {
         return [
-            'paymentAction' => URL::temporarySignedRoute(
-                'booking.payment',
-                now()->addDays(7),
-                ['booking' => $booking]
-            ),
-            'proofAction' => URL::temporarySignedRoute(
-                'booking.proof',
+            'midtransPayAction' => URL::temporarySignedRoute(
+                'booking.midtrans.pay',
                 now()->addDays(7),
                 ['booking' => $booking]
             ),
@@ -34,18 +30,73 @@ class BookingController extends Controller
         ];
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
         $services = Service::where('is_active', true)->orderBy('name')->get();
 
-        return view('booking.index', [
-            'services' => $services,
-            'prefill' => [
-                'name' => old('name', auth()->user()?->name),
-                'email' => old('email', auth()->user()?->email),
-                'phone' => old('phone', ''),
-            ],
-        ]);
+        $prefill = [
+            'name' => old('name', auth()->user()?->name),
+            'email' => old('email', auth()->user()?->email),
+            'phone' => old('phone', ''),
+            'service_id' => old('service_id'),
+            'notes' => old('notes'),
+        ];
+
+        $consultationContext = null;
+
+        if ($request->filled('consultation')) {
+            $consultation = Consultation::query()
+                ->with('recommendedHairStyle')
+                ->where('id', $request->consultation)
+                ->where('user_id', auth()->id())
+                ->first();
+
+            if ($consultation && $consultation->admin_message) {
+                if (! old('notes')) {
+                    $prefill['notes'] = $this->bookingNotesFromConsultation($consultation);
+                }
+
+                if (! old('service_id')) {
+                    $prefill['service_id'] = $this->defaultHaircutServiceId($services);
+                }
+
+                $consultationContext = $consultation;
+            }
+        }
+
+        return view('booking.index', compact('services', 'prefill', 'consultationContext'));
+    }
+
+    private function bookingNotesFromConsultation(Consultation $consultation): string
+    {
+        $lines = [];
+
+        if ($consultation->recommendedHairStyle) {
+            $style = $consultation->recommendedHairStyle;
+            $lines[] = 'Model rambut rekomendasi: '.$style->name;
+
+            if ($style->description) {
+                $lines[] = $style->description;
+            }
+        }
+
+        if ($consultation->admin_message) {
+            $lines[] = 'Catatan admin: '.$consultation->admin_message;
+        }
+
+        $lines[] = 'Referensi konsultasi #'.$consultation->id;
+
+        return implode("\n\n", $lines);
+    }
+
+    private function defaultHaircutServiceId($services): ?int
+    {
+        $haircut = $services->first(function ($service) {
+            return stripos($service->name, 'potong') !== false
+                || stripos($service->name, 'haircut') !== false;
+        });
+
+        return $haircut?->id ?? $services->first()?->id;
     }
 
     public function store(Request $request): RedirectResponse
@@ -87,48 +138,67 @@ class BookingController extends Controller
             ['booking' => $booking]
         );
 
-        return redirect()->to($url)->with('success', 'Booking berhasil dibuat!');
+        return redirect()->to($url)->with('success', 'Booking berhasil dibuat! Silakan lanjutkan pembayaran.');
     }
 
-    public function choosePayment(Request $request, Booking $booking): RedirectResponse
+    public function payWithMidtrans(Booking $booking, MidtransService $midtrans): RedirectResponse
     {
-        $validated = $request->validate([
-            'payment_method' => ['required', 'in:'.Booking::METHOD_QRIS.','.Booking::METHOD_BANK_TRANSFER],
-        ]);
+        if ($booking->payment_status === Booking::PAYMENT_PAID) {
+            return redirect()->to(
+                URL::temporarySignedRoute('booking.confirmation', now()->addDays(7), ['booking' => $booking])
+            )->with('error', 'Pembayaran sudah lunas.');
+        }
 
-        $booking->update([
-            'payment_method' => $validated['payment_method'],
-        ]);
+        try {
+            $token = $midtrans->createSnapToken($booking);
+        } catch (\Exception $e) {
+            return redirect()->to(
+                URL::temporarySignedRoute('booking.confirmation', now()->addDays(7), ['booking' => $booking])
+            )->with('error', 'Gagal membuat pembayaran Midtrans: '.$e->getMessage());
+        }
 
         return redirect()->to(
             URL::temporarySignedRoute('booking.confirmation', now()->addDays(7), ['booking' => $booking])
-        )->with('success', 'Metode pembayaran dipilih. Silakan lakukan pembayaran sesuai petunjuk.');
+        )->with('snap_token', $token);
     }
 
-    public function confirmation(Booking $booking): View
+    public function confirmation(Booking $booking, MidtransService $midtrans): View
     {
         $booking->load(['service', 'user']);
 
+        if ($booking->payment_status !== Booking::PAYMENT_PAID && $booking->midtrans_order_id) {
+            $midtrans->syncBookingStatus($booking);
+            $booking->refresh();
+        }
+
         return view('booking.confirmation', array_merge([
             'booking' => $booking,
-            'barber' => config('barbershop'),
+            'midtransClientKey' => config('midtrans.client_key'),
+            'snapScriptUrl' => config('midtrans.snap_url'),
         ], $this->bookingUrls($booking)));
     }
 
     public function myBookings(): View
     {
         $bookings = auth()->user()->bookings()->with('service')->latest()->paginate(10);
+
         return view('booking.my-bookings', ['bookings' => $bookings]);
     }
 
-    public function show(Booking $booking): View
+    public function show(Booking $booking, MidtransService $midtrans): View
     {
         $this->authorize('view', $booking);
         $booking->load(['service', 'user']);
 
+        if ($booking->payment_status !== Booking::PAYMENT_PAID && $booking->midtrans_order_id) {
+            $midtrans->syncBookingStatus($booking);
+            $booking->refresh();
+        }
+
         return view('booking.confirmation', array_merge([
             'booking' => $booking,
-            'barber' => config('barbershop'),
+            'midtransClientKey' => config('midtrans.client_key'),
+            'snapScriptUrl' => config('midtrans.snap_url'),
         ], $this->bookingUrls($booking)));
     }
 
@@ -143,41 +213,11 @@ class BookingController extends Controller
         return view('booking.print-barcode', ['booking' => $booking]);
     }
 
-    public function uploadProof(Request $request, Booking $booking): RedirectResponse
-    {
-        $request->validate([
-            'payment_proof' => ['required', 'image', 'max:6144'],
-        ], [
-            'payment_proof.required' => 'Pilih file gambar bukti transfer.',
-        ]);
-
-        if ($booking->payment_proof_path) {
-            Storage::disk('public')->delete($booking->payment_proof_path);
-        }
-
-        $path = $request->file('payment_proof')->store('booking-payment-proofs', 'public');
-
-        $updates = [
-            'payment_proof_path' => $path,
-            'payment_status' => Booking::PAYMENT_PAID,
-            'payment_note' => 'Diverifikasi otomatis setelah unggah bukti pembayaran.',
-        ];
-
-        if (! $booking->queue_code) {
-            $updates['queue_code'] = Booking::generateUniqueQueueCode();
-        }
-
-        $booking->update($updates);
-
-        return redirect()->to(
-            URL::temporarySignedRoute('booking.confirmation', now()->addDays(7), ['booking' => $booking])
-        )->with('success', 'Pembayaran berhasil! Barcode antrian Anda sudah tersedia.');
-    }
-
     public function cancel(Booking $booking): RedirectResponse
     {
         $this->authorize('delete', $booking);
         $booking->update(['status' => Booking::STATUS_CANCELLED]);
+
         return redirect()->route('bookings.my')->with('success', 'Booking dibatalkan!');
     }
 }

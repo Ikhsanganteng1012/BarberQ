@@ -26,6 +26,11 @@ class Booking extends Model
         'amount',
         'payment_note',
         'payment_proof_path',
+        'midtrans_order_id',
+        'snap_token',
+        'transaction_id',
+        'transaction_status',
+        'payment_type',
     ];
 
     protected $casts = [
@@ -43,6 +48,7 @@ class Booking extends Model
 
     const METHOD_QRIS = 'qris';
     const METHOD_BANK_TRANSFER = 'bank_transfer';
+    const METHOD_MIDTRANS = 'midtrans';
 
     public static function generateUniqueQueueCode(): string
     {
@@ -51,6 +57,24 @@ class Booking extends Model
         } while (self::query()->where('queue_code', $code)->exists());
 
         return $code;
+    }
+
+    public function markAsPaidFromMidtrans(array $data = []): void
+    {
+        $updates = [
+            'payment_status' => self::PAYMENT_PAID,
+            'payment_method' => self::METHOD_MIDTRANS,
+            'transaction_id' => $data['transaction_id'] ?? $this->transaction_id,
+            'transaction_status' => $data['transaction_status'] ?? $this->transaction_status,
+            'payment_type' => $data['payment_type'] ?? $this->payment_type,
+            'payment_note' => 'Pembayaran Midtrans ('.($data['transaction_status'] ?? 'success').')',
+        ];
+
+        if (! $this->queue_code) {
+            $updates['queue_code'] = self::generateUniqueQueueCode();
+        }
+
+        $this->update($updates);
     }
 
     public function user()

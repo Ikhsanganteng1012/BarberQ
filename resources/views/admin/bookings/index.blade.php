@@ -6,7 +6,7 @@
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
     <div>
         <h4 class="fw-bold mb-1">Transaksi Booking</h4>
-        <div class="text-muted">Antrian, metode bayar (QRIS / transfer), dan status pembayaran otomatis.</div>
+        <div class="text-muted">Antrian, pembayaran Midtrans, dan status transaksi.</div>
     </div>
 </div>
 <div class="table-responsive">
@@ -38,7 +38,9 @@
                     <td class="small">{{ $b->booking_date?->format('d/m/Y') }}<br>{{ substr($b->booking_time, 0, 5) }}</td>
                     <td>Rp {{ number_format($b->amount ?? 0, 0, ',', '.') }}</td>
                     <td>
-                        @if($b->payment_method === \App\Models\Booking::METHOD_QRIS)
+                        @if($b->payment_method === \App\Models\Booking::METHOD_MIDTRANS)
+                            <span class="badge text-bg-success">Midtrans</span>
+                        @elseif($b->payment_method === \App\Models\Booking::METHOD_QRIS)
                             <span class="badge text-bg-info text-dark">QRIS</span>
                         @elseif($b->payment_method === \App\Models\Booking::METHOD_BANK_TRANSFER)
                             <span class="badge text-bg-primary">Transfer</span>

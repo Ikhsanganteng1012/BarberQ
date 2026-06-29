@@ -40,11 +40,22 @@
                     <li class="mb-2"><strong>Jadwal:</strong> {{ $booking->booking_date?->format('d M Y') }} {{ substr($booking->booking_time, 0, 5) }}</li>
                     <li class="mb-2"><strong>Total:</strong> Rp {{ number_format($booking->amount ?? 0, 0, ',', '.') }}</li>
                     <li class="mb-2"><strong>Metode:</strong>
-                        @if($booking->payment_method === \App\Models\Booking::METHOD_QRIS) QRIS
+                        @if($booking->payment_method === \App\Models\Booking::METHOD_MIDTRANS)
+                            Midtrans @if($booking->payment_type) ({{ $booking->payment_type }}) @endif
+                        @elseif($booking->payment_method === \App\Models\Booking::METHOD_QRIS) QRIS
                         @elseif($booking->payment_method === \App\Models\Booking::METHOD_BANK_TRANSFER) Transfer bank
                         @else —
                         @endif
                     </li>
+                    @if($booking->midtrans_order_id)
+                        <li class="mb-2"><strong>Order ID:</strong> <span class="font-monospace">{{ $booking->midtrans_order_id }}</span></li>
+                    @endif
+                    @if($booking->transaction_id)
+                        <li class="mb-2"><strong>Transaction ID:</strong> <span class="font-monospace">{{ $booking->transaction_id }}</span></li>
+                    @endif
+                    @if($booking->transaction_status)
+                        <li class="mb-2"><strong>Status Midtrans:</strong> {{ $booking->transaction_status }}</li>
+                    @endif
                 </ul>
             </div>
         </div>
@@ -72,12 +83,12 @@
 
 <div class="card border shadow-sm mt-4">
     <div class="card-body">
-        <h6 class="fw-bold mb-3">Pembayaran (QRIS / transfer)</h6>
+        <h6 class="fw-bold mb-3">Pembayaran Midtrans</h6>
         <div class="row g-3 mb-3">
             <div class="col-md-4">
                 <div class="text-muted small">Status pembayaran</div>
                 @if($booking->payment_status === \App\Models\Booking::PAYMENT_PAID)
-                    <span class="badge text-bg-success">Lunas (otomatis)</span>
+                    <span class="badge text-bg-success">Lunas</span>
                 @else
                     <span class="badge text-bg-secondary">Belum lunas</span>
                 @endif
@@ -89,21 +100,7 @@
                 </div>
             @endif
         </div>
-        <p class="small text-muted mb-0">Status pembayaran otomatis lunas setelah pelanggan mengunggah bukti transfer.</p>
-        <hr>
-        <div class="small">
-            <div><strong>Rekening (referensi transfer):</strong> {{ $barber['bank_name'] }} — {{ $barber['bank_account_number'] }} a.n. {{ $barber['bank_account_name'] }}</div>
-        </div>
-        @if($booking->payment_proof_path)
-            <hr>
-            <div class="fw-semibold mb-2">Bukti pembayaran (unggahan pelanggan)</div>
-            <a href="{{ asset('storage/'.$booking->payment_proof_path) }}" target="_blank" rel="noopener">
-                <img src="{{ asset('storage/'.$booking->payment_proof_path) }}" alt="Bukti transfer" class="img-fluid rounded border" style="max-height:320px;">
-            </a>
-        @else
-            <hr>
-            <p class="small text-muted mb-0">Belum ada bukti pembayaran diunggah.</p>
-        @endif
+        <p class="small text-muted mb-0">Pembayaran diproses otomatis via Midtrans (webhook notification).</p>
     </div>
 </div>
 @endsection

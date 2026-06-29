@@ -31,6 +31,23 @@
                         </div>
                     @endif
 
+                    @if(isset($consultationContext))
+                        <div class="alert mb-4" style="background: linear-gradient(135deg, rgba(212,175,55,0.12), rgba(212,175,55,0.05)); border: 1px solid rgba(212,175,55,0.35); border-radius: 12px;">
+                            <div class="d-flex align-items-start gap-3">
+                                <i class="fas fa-magic mt-1" style="color: #d4af37; font-size: 1.25rem;"></i>
+                                <div>
+                                    <div class="fw-bold" style="color: #1a1a1a;">Data dari Konsultasi #{{ $consultationContext->id }}</div>
+                                    <div class="small text-muted mt-1">
+                                        Layanan dan catatan model rambut sudah diisi otomatis dari rekomendasi admin.
+                                        @if($consultationContext->recommendedHairStyle)
+                                            Model: <strong>{{ $consultationContext->recommendedHairStyle->name }}</strong>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     @if($services->isEmpty())
                         <div class="alert alert-warning mb-0">
                             Belum ada layanan aktif. Silakan hubungi admin atau coba lagi nanti.
@@ -47,7 +64,7 @@
                             <select class="form-select @error('service_id') is-invalid @enderror" id="service_id" name="service_id" required style="border-radius: 8px; padding: 0.75rem; border: 2px solid #e0e0e0;">
                                 <option value="">-- Pilih Layanan --</option>
                                 @foreach($services as $service)
-                                    <option value="{{ $service->id }}" data-price="{{ $service->price }}" data-duration="{{ $service->duration }}">
+                                    <option value="{{ $service->id }}" data-price="{{ $service->price }}" data-duration="{{ $service->duration }}" {{ (string) ($prefill['service_id'] ?? '') === (string) $service->id ? 'selected' : '' }}>
                                         {{ $service->name }} - Rp {{ number_format($service->price, 0, ',', '.') }} ({{ $service->duration }} min)
                                     </option>
                                 @endforeach
@@ -140,7 +157,7 @@
                             <label for="notes" class="form-label" style="font-weight: 600; color: #1a1a1a;">
                                 <i class="fas fa-sticky-note me-2" style="color: #d4af37;"></i>Catatan Tambahan (Opsional)
                             </label>
-                            <textarea class="form-control @error('notes') is-invalid @enderror" id="notes" name="notes" rows="3" placeholder="Contoh: Potong pendek, harap tidak terlalu pendek, dll" style="border-radius: 8px; padding: 0.75rem; border: 2px solid #e0e0e0;">{{ old('notes') }}</textarea>
+                            <textarea class="form-control @error('notes') is-invalid @enderror" id="notes" name="notes" rows="3" placeholder="Contoh: Potong pendek, harap tidak terlalu pendek, dll" style="border-radius: 8px; padding: 0.75rem; border: 2px solid #e0e0e0;">{{ $prefill['notes'] ?? '' }}</textarea>
                             @error('notes')
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror

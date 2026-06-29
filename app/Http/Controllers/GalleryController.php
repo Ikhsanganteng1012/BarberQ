@@ -10,6 +10,15 @@ class GalleryController extends Controller
     public function index(): View
     {
         $galleries = Gallery::where('is_active', true)->paginate(12);
-        return view('gallery.index', ['galleries' => $galleries]);
+
+        $galleryItems = $galleries->map(function ($gallery) {
+            return [
+                'image' => $gallery->image_url,
+                'title' => $gallery->title,
+                'description' => $gallery->description ?? '',
+            ];
+        })->values();
+
+        return view('gallery.index', compact('galleries', 'galleryItems'));
     }
 }

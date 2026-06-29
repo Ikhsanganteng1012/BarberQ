@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AboutController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\MidtransController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\GalleryController;
 use App\Http\Controllers\TestimonialController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\HairStyleController as AdminHairStyleController;
@@ -51,15 +53,18 @@ Route::middleware('auth')->group(function () {
 Route::get('/booking/confirmation/{booking}', [BookingController::class, 'confirmation'])
     ->middleware('signed')
     ->name('booking.confirmation');
-Route::post('/booking/confirmation/{booking}/payment', [BookingController::class, 'choosePayment'])
+Route::post('/booking/confirmation/{booking}/midtrans', [BookingController::class, 'payWithMidtrans'])
     ->middleware('signed')
-    ->name('booking.payment');
+    ->name('booking.midtrans.pay');
 Route::get('/booking/confirmation/{booking}/print', [BookingController::class, 'printBarcode'])
     ->middleware('signed')
     ->name('booking.print');
-Route::post('/booking/confirmation/{booking}/proof', [BookingController::class, 'uploadProof'])
-    ->middleware('signed')
-    ->name('booking.proof');
+
+// Midtrans payment callbacks
+Route::post('/midtrans/notification', [MidtransController::class, 'notification'])->name('midtrans.notification');
+Route::get('/payment/finish/{booking}', [MidtransController::class, 'finish'])->name('midtrans.finish');
+Route::get('/payment/unfinish/{booking}', [MidtransController::class, 'unfinish'])->name('midtrans.unfinish');
+Route::get('/payment/error/{booking}', [MidtransController::class, 'error'])->name('midtrans.error');
 
 // Contact
 Route::post('/contact', [ContactController::class, 'store'])->name('contact.store');
@@ -93,6 +98,9 @@ Route::middleware('guest')->group(function () {
 
     Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register.index');
     Route::post('/register', [RegisterController::class, 'register'])->name('register.store');
+
+    Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google');
+    Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
 });
 
 // Admin routes (akan diisi lengkap nanti)

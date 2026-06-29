@@ -221,6 +221,34 @@
     }
     .btn-login:active { transform: translateY(0); }
 
+    .btn-google {
+        width: 100%;
+        padding: 0.9rem 1rem;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 12px;
+        color: #fff;
+        font-weight: 600;
+        font-size: 0.95rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+    .btn-google:hover {
+        background: rgba(255,255,255,0.14);
+        border-color: rgba(255,255,255,0.35);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+    .btn-google img {
+        width: 20px;
+        height: 20px;
+    }
+
     .divider {
         display: flex;
         align-items: center;
@@ -327,7 +355,12 @@
 
         <div class="divider">ATAU</div>
 
-        <p class="footer-text">
+        <a href="{{ route('auth.google') }}" class="btn-google">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+            <span>Masuk dengan Google</span>
+        </a>
+
+        <p class="footer-text" style="margin-top: 1.5rem;">
             Belum punya akun? <a href="{{ route('register.index') }}">Daftar</a>
         </p>
     </div>

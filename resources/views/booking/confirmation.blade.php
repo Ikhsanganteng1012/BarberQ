@@ -12,9 +12,9 @@
                 </div>
                 <h1 class="fw-bold">Booking Berhasil</h1>
                 @if($booking->payment_status === \App\Models\Booking::PAYMENT_PAID)
-                    <p class="text-muted">Pembayaran lunas. Tunjukkan <strong>barcode antrian</strong> di kasir saat kedatangan.</p>
+                    <p class="text-muted">Pembayaran lunas via Midtrans. Tunjukkan <strong>barcode antrian</strong> di kasir saat kedatangan.</p>
                 @else
-                    <p class="text-muted">Selesaikan pembayaran terlebih dahulu. Barcode antrian akan muncul setelah bukti pembayaran diunggah.</p>
+                    <p class="text-muted">Selesaikan pembayaran via Midtrans. Barcode antrian akan muncul setelah pembayaran berhasil.</p>
                 @endif
             </div>
 
@@ -60,10 +60,18 @@
                             <div class="text-muted small">STATUS PEMBAYARAN</div>
                             @if($booking->payment_status === \App\Models\Booking::PAYMENT_PAID)
                                 <span class="badge text-bg-success">Lunas</span>
+                            @elseif($booking->transaction_status === 'pending')
+                                <span class="badge text-bg-info text-dark">Menunggu Midtrans</span>
                             @else
-                                <span class="badge text-bg-secondary">Belum / Menunggu</span>
+                                <span class="badge text-bg-secondary">Belum Bayar</span>
                             @endif
                         </div>
+                        @if($booking->transaction_id)
+                            <div class="col-12">
+                                <div class="text-muted small">ID TRANSAKSI MIDTRANS</div>
+                                <div class="font-monospace small">{{ $booking->transaction_id }}</div>
+                            </div>
+                        @endif
                     </div>
                     @if($booking->notes)
                         <div class="mt-3 p-3 bg-light rounded small"><strong>Catatan:</strong> {{ $booking->notes }}</div>
@@ -73,80 +81,32 @@
 
             @if($booking->payment_status !== \App\Models\Booking::PAYMENT_PAID)
             <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body p-4">
-                    <h5 class="fw-bold border-bottom pb-2 mb-3"><i class="fas fa-money-bill-wave me-2 text-success"></i>Pembayaran (QRIS / Transfer Bank)</h5>
-                    <p class="text-muted small">Pilih metode pembayaran, lakukan transfer, lalu unggah bukti. Status pembayaran akan otomatis lunas setelah bukti diunggah.</p>
+                <div class="card-body p-4 text-center">
+                    <h5 class="fw-bold border-bottom pb-2 mb-3">
+                        <i class="fas fa-credit-card me-2 text-success"></i>Pembayaran via Midtrans
+                    </h5>
+                    <p class="text-muted small mb-4">
+                        Bayar dengan QRIS, transfer bank, e-wallet, dan metode lain melalui Midtrans Snap.
+                        Setelah pembayaran berhasil, barcode antrian otomatis tersedia.
+                    </p>
 
-                    <form method="POST" action="{{ $paymentAction }}" class="mb-4">
-                        @csrf
-                        <div class="row g-2">
-                            <div class="col-md-6">
-                                <button type="submit" name="payment_method" value="qris" class="btn btn-outline-primary w-100 py-3 {{ $booking->payment_method === 'qris' ? 'active' : '' }}">
-                                    <i class="fas fa-qrcode d-block fa-lg mb-1"></i> Bayar via QRIS
-                                </button>
-                            </div>
-                            <div class="col-md-6">
-                                <button type="submit" name="payment_method" value="bank_transfer" class="btn btn-outline-primary w-100 py-3 {{ $booking->payment_method === 'bank_transfer' ? 'active' : '' }}">
-                                    <i class="fas fa-university d-block fa-lg mb-1"></i> Transfer Bank
-                                </button>
-                            </div>
+                    <div class="border rounded p-4 bg-light mb-4">
+                        <div class="text-muted small mb-1">TOTAL BAYAR</div>
+                        <div class="fs-3 fw-bold text-warning mb-0">
+                            Rp {{ number_format($booking->amount ?? 0, 0, ',', '.') }}
                         </div>
+                    </div>
+
+                    <form method="POST" action="{{ $midtransPayAction }}" id="midtransPayForm">
+                        @csrf
+                        <button type="submit" class="btn btn-success btn-lg px-5" id="btnPayMidtrans">
+                            <i class="fas fa-lock me-2"></i>Bayar Sekarang
+                        </button>
                     </form>
 
-                    @php
-                        $paymentRef = $booking->queue_code ?? ('BOOKING-'.$booking->id);
-                        $qrisPayload = 'BARBERSHOP|'.$paymentRef.'|'.number_format((float) ($booking->amount ?? 0), 0, '', '');
-                    @endphp
-
-                    @if($booking->payment_method === \App\Models\Booking::METHOD_QRIS)
-                        <div class="border rounded p-3 bg-light">
-                            <div class="fw-semibold mb-2">Pembayaran QRIS</div>
-                            <p class="small text-muted mb-2">Scan menggunakan e-wallet Anda. Setelah bayar, unggah screenshot bukti pembayaran di bawah.</p>
-                            @php
-                                $qrisPath = public_path($barber['qris_image']);
-                            @endphp
-                            <div class="text-center">
-                                @if(file_exists($qrisPath))
-                                    <img src="{{ asset($barber['qris_image']) }}" alt="QRIS" class="img-fluid mb-2" style="max-width:220px;">
-                                @else
-                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data={{ urlencode($qrisPayload) }}" alt="QR pembayaran" class="img-fluid mb-2">
-                                @endif
-                                <div class="small text-muted">{{ $qrisPayload }}</div>
-                            </div>
-                        </div>
-                    @elseif($booking->payment_method === \App\Models\Booking::METHOD_BANK_TRANSFER)
-                        <div class="border rounded p-3 bg-light">
-                            <div class="fw-semibold mb-2">Transfer ke rekening</div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Bank:</strong> {{ $barber['bank_name'] }}</li>
-                                <li><strong>Atas nama:</strong> {{ $barber['bank_account_name'] }}</li>
-                                <li><strong>No. rekening:</strong> <span class="font-monospace">{{ $barber['bank_account_number'] }}</span></li>
-                                <li class="mt-2"><strong>Nominal:</strong> Rp {{ number_format($booking->amount ?? 0, 0, ',', '.') }}</li>
-                                <li class="mt-1 text-muted">Sertakan berita transfer: <span class="font-monospace">{{ $paymentRef }}</span></li>
-                            </ul>
-                        </div>
-                    @endif
-
-                    <div class="border-top pt-4 mt-4">
-                        <h6 class="fw-bold mb-2"><i class="fas fa-paperclip me-2"></i>Unggah bukti pembayaran</h6>
-                        <p class="small text-muted mb-3">Setelah unggah bukti, status pembayaran otomatis lunas dan barcode antrian akan tersedia.</p>
-                        @if($booking->payment_proof_path)
-                            <div class="mb-3">
-                                <span class="badge text-bg-success mb-2">Bukti sudah diunggah</span>
-                                <div><img src="{{ asset('storage/'.$booking->payment_proof_path) }}" alt="Bukti" class="img-fluid rounded border" style="max-height:200px;"></div>
-                            </div>
-                        @endif
-                        <form method="POST" action="{{ $proofAction }}" enctype="multipart/form-data" class="row g-2 align-items-end">
-                            @csrf
-                            <div class="col-md-8">
-                                <label class="form-label small mb-0">File gambar (JPG/PNG, maks. 6 MB)</label>
-                                <input type="file" name="payment_proof" class="form-control form-control-sm" accept="image/*" required>
-                            </div>
-                            <div class="col-md-4">
-                                <button type="submit" class="btn btn-success w-100">Unggah bukti</button>
-                            </div>
-                        </form>
-                    </div>
+                    <p class="text-muted small mt-3 mb-0">
+                        <i class="fas fa-shield-alt me-1"></i> Pembayaran aman diproses oleh Midtrans
+                    </p>
                 </div>
             </div>
             @endif
@@ -197,6 +157,23 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     } catch (e) {
         console.warn(e);
+    }
+});
+</script>
+@endif
+
+@if($booking->payment_status !== \App\Models\Booking::PAYMENT_PAID && session('snap_token'))
+<script src="{{ $snapScriptUrl }}" data-client-key="{{ $midtransClientKey }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var token = @json(session('snap_token'));
+    if (token && window.snap) {
+        snap.pay(token, {
+            onSuccess: function () {},
+            onPending: function () {},
+            onError: function () {},
+            onClose: function () {}
+        });
     }
 });
 </script>

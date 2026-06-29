@@ -30,7 +30,7 @@
                         </p>
                         <a class="btn btn-sm btn-outline-dark mt-2" href="{{ \Illuminate\Support\Facades\URL::temporarySignedRoute('booking.confirmation', now()->addDays(7), ['booking' => $booking]) }}">
                             <i class="fas fa-{{ $booking->payment_status === 'paid' ? 'qrcode' : 'credit-card' }} me-1"></i>
-                            {{ $booking->payment_status === 'paid' ? 'Lihat barcode' : 'Bayar & dapatkan barcode' }}
+                            {{ $booking->payment_status === 'paid' ? 'Lihat barcode' : 'Bayar via Midtrans' }}
                         </a>
                     </div>
                     <div class="col-md-4 text-end">
